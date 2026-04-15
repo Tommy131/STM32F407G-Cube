@@ -394,6 +394,11 @@
               <FileType>1</FileType>
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
             </File>
+            <File>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -791,6 +796,11 @@
               <FileName>_mcpr_stm32f407.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
+            </File>
+            <File>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
             </File>
           </Files>
         </Group>
@@ -1327,6 +1337,11 @@
               <FileName>_mcpr_stm32f407.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
+            </File>
+            <File>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
             </File>
           </Files>
         </Group>
