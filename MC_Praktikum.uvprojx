@@ -397,7 +397,7 @@
             <File>
               <FileName>display.o</FileName>
               <FileType>3</FileType>
-              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
@@ -800,7 +800,7 @@
             <File>
               <FileName>display.o</FileName>
               <FileType>3</FileType>
-              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
@@ -1341,7 +1341,7 @@
             <File>
               <FileName>display.o</FileName>
               <FileType>3</FileType>
-              <FilePath>..\..\..\..\..\..\..\Downloads\display.o</FilePath>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
