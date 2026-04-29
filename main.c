@@ -64,7 +64,7 @@ void LEDs_Write(uint16_t data);
 void Timer7_Init(void);
 void Timer4_PWM_Init(void);
 void Set_Backlight_Duty(uint16_t duty);
-void My_WriteToLCD_Int(int value);
+void LCD_UpdateDisplay(void);
 void u_delay(uint32_t usec);
 
 /* ==================== Timer4 PWM 初始化（PD13 = TIM4_CH2，150 Hz） ==================== */
@@ -226,7 +226,8 @@ void TIM7_IRQHandler(void)
     if (ms_ticks - counter_last >= 1000)
     {
         counter_last = ms_ticks;
-        My_WriteToLCD_Int(counter++);
+        counter++;
+        LCD_UpdateDisplay();
     }
 
     /* ------------------------------------------------------------------ */
@@ -236,16 +237,16 @@ void TIM7_IRQHandler(void)
     {
         uint32_t elapsed = ms_ticks - release_time;
 
-        /* 10 秒到期：关闭倒计时，开始背光淡出 */
+        /* 10 秒到期：关闭倒计时，开始背光淡出，立即清除倒计时行 */
         if (elapsed >= 10000)
         {
             countdown_active = 0;
 
-            /* 启动淡出：从当前亮度缓慢降至 BACKLIGHT_DIM */
             fade_active = 1;
             fade_last   = ms_ticks;
 
             LEDs_Write(0x0000);
+            LCD_UpdateDisplay();   /* 立即清除 "countdown" 行 */
         }
     }
 
@@ -304,6 +305,9 @@ int main(void)
 
     /* ---- 启动 Timer7（1 ms 节拍） ---- */
     Timer7_Init();
+
+    /* ---- 上电后立即显示初始内容 ---- */
+    LCD_UpdateDisplay();
 
     /* ==================== 主循环：持续跑马灯 ==================== */
     /*
@@ -391,9 +395,35 @@ void LEDs_Write(uint16_t data)
     GPIOD->ODR |=  (1 << LED_CS_PIN);
 }
 
-void My_WriteToLCD_Int(int value)
+/*
+ * LCD_UpdateDisplay - Aktualisiert beide Anzeigezeilen.
+ *
+ * Zeile 1 (y=10): "Time Ticker: n"   – läuft immer
+ * Zeile 2 (y=30): "countdown: N s"   – nur während des 10-s-Countdowns
+ *                 (Zeile wird beim Ablauf des Countdowns gelöscht)
+ *
+ * Hintergrundfarbe 0xFE00 entspricht LCD_ClearDisplay-Farbe,
+ * damit alte Ziffern sauber überschrieben werden.
+ */
+void LCD_UpdateDisplay(void)
 {
-    char buffer[8];
-    sprintf(buffer, "%d", value);
-    LCD_WriteString(10, 10, 0xFFFF, 0x0000, buffer);
+    char buf[32];
+
+    /* Zeile 1: immer sichtbar */
+    sprintf(buf, "Time Ticker: %-6d", counter);   /* %-6d überschreibt alte Ziffern */
+    LCD_WriteString(10, 10, WHITE, 0xFE00, buf);
+
+    /* Zeile 2: nur während aktivem Countdown */
+    if (countdown_active)
+    {
+        uint32_t elapsed   = ms_ticks - release_time;
+        uint8_t  remaining = (elapsed < 10000) ? (uint8_t)(10 - elapsed / 1000) : 0;
+        sprintf(buf, "countdown: %-2d s  ", remaining);
+        LCD_WriteString(10, 30, WHITE, 0xFE00, buf);
+    }
+    else
+    {
+        /* Zeile leeren (Hintergrundfarbe überschreibt alten Text) */
+        LCD_WriteString(10, 30, 0xFE00, 0xFE00, "                  ");
+    }
 }
