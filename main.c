@@ -83,11 +83,11 @@ void u_delay(uint32_t usec);
 void Timer4_PWM_Init(void)
 {
     /* 使能 GPIOD 和 TIM4 时钟 */
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+    // RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN; // steht schon in LEDs_InitPorts() an Zeil 350
     RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
 
     /* PD13 → AF-Modus (MODER[27:26] = 10b) */
-    GPIOD->MODER &= ~(3U << (2 * 13));
+    GPIOD->MODER &= ~(3U << (2 * 13)); // U: unsigned literal suffix (positive)
     GPIOD->MODER |=  (2U << (2 * 13));
 
     /* Alternate Function: AF2 (TIM4) für Pin 13 in AFRH (AFR[1])
@@ -330,14 +330,14 @@ int main(void)
         for (int i = 0; i < 16; i++)
         {
             LEDs_Write(1 << i);
-            u_delay(120000);
+            u_delay(100000);
         }
 
         /* 全亮逐个熄灭 */
         for (int i = 0; i < 16; i++)
         {
             LEDs_Write(~(uint16_t)(1 << i));
-            u_delay(120000);
+            u_delay(100000);
         }
     }
 }

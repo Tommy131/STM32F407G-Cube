@@ -395,9 +395,9 @@
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
             </File>
             <File>
-              <FileName>display.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\display.c</FilePath>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
@@ -798,9 +798,9 @@
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
             </File>
             <File>
-              <FileName>display.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\display.c</FilePath>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
@@ -1339,9 +1339,9 @@
               <FilePath>.\_mcpr_stm32f407.c</FilePath>
             </File>
             <File>
-              <FileName>display.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\display.c</FilePath>
+              <FileName>display.o</FileName>
+              <FileType>3</FileType>
+              <FilePath>.\display.o</FilePath>
             </File>
           </Files>
         </Group>
