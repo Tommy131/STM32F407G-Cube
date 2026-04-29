@@ -47,6 +47,9 @@ volatile uint32_t release_time     = 0;  /* 按键松开时刻 (ms) */
 
 volatile int      counter          = 0;  /* LCD 计数器（始终递增）*/
 
+/* LCD 刷新请求标志：ISR 置位，主循环负责实际刷新，避免在中断中执行耗时的 GPIO 操作 */
+volatile uint8_t  lcd_update_pending = 0;
+
 /* PWM 亮度控制 */
 volatile uint16_t current_duty = BACKLIGHT_DIM; /* 当前 CCR2 值 */
 volatile uint8_t  fade_active  = 0;             /* 淡出进行中 */
@@ -227,7 +230,7 @@ void TIM7_IRQHandler(void)
     {
         counter_last = ms_ticks;
         counter++;
-        LCD_UpdateDisplay();
+        lcd_update_pending = 1;   /* 通知主循环刷新 LCD，不在中断中执行 */
     }
 
     /* ------------------------------------------------------------------ */
@@ -246,7 +249,7 @@ void TIM7_IRQHandler(void)
             fade_last   = ms_ticks;
 
             LEDs_Write(0x0000);
-            LCD_UpdateDisplay();   /* 立即清除 "countdown" 行 */
+            lcd_update_pending = 1;   /* 通知主循环清除 countdown 行 */
         }
     }
 
@@ -316,6 +319,13 @@ int main(void)
      */
     while (1)
     {
+        /* LCD 刷新在主循环中执行，避免阻塞中断（PD12 1Hz 精度依赖于此）*/
+        if (lcd_update_pending)
+        {
+            lcd_update_pending = 0;
+            LCD_UpdateDisplay();
+        }
+
         /* 正向单灯跑马灯 */
         for (int i = 0; i < 16; i++)
         {
