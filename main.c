@@ -44,9 +44,8 @@ volatile uint8_t  key_last        = 0;   /* 上次按键状态（边沿检测用
 
 volatile uint8_t  countdown_active = 0;  /* 10秒倒计时进行中 */
 volatile uint32_t release_time     = 0;  /* 按键松开时刻 (ms) */
-volatile uint8_t  last_displayed   = 255;
 
-volatile int      counter          = 0;
+volatile int      counter          = 0;  /* LCD 计数器（始终递增）*/
 
 /* PWM 亮度控制 */
 volatile uint16_t current_duty = BACKLIGHT_DIM; /* 当前 CCR2 值 */
@@ -65,7 +64,6 @@ void LEDs_Write(uint16_t data);
 void Timer7_Init(void);
 void Timer4_PWM_Init(void);
 void Set_Backlight_Duty(uint16_t duty);
-void Reset_Counter(void);
 void My_WriteToLCD_Int(int value);
 void u_delay(uint32_t usec);
 
@@ -155,8 +153,9 @@ void Timer7_Init(void)
  * 所有时序逻辑均在此处理：
  *   1. 按键边沿检测（每 50 ms 采样）
  *   2. PD12 精确 1 Hz 闪烁
- *   3. 10 秒倒计时
- *   4. 背光亮度淡出（倒计时结束后缓慢降至低亮度）
+ *   3. 独立计时器：每秒刷新 LCD（始终运行）
+ *   4. 10 秒倒计时（仅控制背光淡出时机）
+ *   5. 背光亮度淡出（倒计时结束后缓慢降至低亮度）
  */
 void TIM7_IRQHandler(void)
 {
@@ -182,7 +181,6 @@ void TIM7_IRQHandler(void)
             button_pressed   = 1;
             countdown_active = 0;
             fade_active      = 0;    /* 取消正在进行的淡出 */
-            Reset_Counter();
 
             /* 全亮度：CCR2 = 1000 (100%) */
             Set_Backlight_Duty(BACKLIGHT_FULL);
@@ -194,7 +192,6 @@ void TIM7_IRQHandler(void)
             button_pressed   = 0;
             release_time     = ms_ticks;
             countdown_active = 1;
-            last_displayed   = 255;
 
             /* PD12 松开后立即常亮 */
             led_state = 1;
@@ -222,23 +219,24 @@ void TIM7_IRQHandler(void)
     }
 
     /* ------------------------------------------------------------------ */
-    /* 3. 10 秒倒计时（按键松开后）                                         */
+    /* 3. 独立计时器：每秒递增计数器并刷新 LCD（始终运行，与按键无关）      */
+    /* ------------------------------------------------------------------ */
+    static uint32_t counter_last = 0;
+
+    if (ms_ticks - counter_last >= 1000)
+    {
+        counter_last = ms_ticks;
+        My_WriteToLCD_Int(counter++);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 4. 10 秒倒计时（按键松开后，仅控制背光淡出时机）                     */
     /* ------------------------------------------------------------------ */
     if (countdown_active)
     {
-        uint32_t elapsed   = ms_ticks - release_time;
-        uint8_t  remaining = (elapsed < 10000)
-                             ? (uint8_t)(10 - elapsed / 1000)
-                             : 0;
+        uint32_t elapsed = ms_ticks - release_time;
 
-        /* 每秒刷新 LCD 一次 */
-        if (remaining != last_displayed)
-        {
-            last_displayed = remaining;
-            My_WriteToLCD_Int(counter++);
-        }
-
-        /* 10 秒到期：关闭倒计时，开始淡出 */
+        /* 10 秒到期：关闭倒计时，开始背光淡出 */
         if (elapsed >= 10000)
         {
             countdown_active = 0;
@@ -247,9 +245,7 @@ void TIM7_IRQHandler(void)
             fade_active = 1;
             fade_last   = ms_ticks;
 
-            LCD_ClearDisplay(0xFE00);
             LEDs_Write(0x0000);
-            Reset_Counter();
         }
     }
 
@@ -393,11 +389,6 @@ void LEDs_Write(uint16_t data)
     GPIOD->ODR |=  (1 << LED_WR_PIN);
 
     GPIOD->ODR |=  (1 << LED_CS_PIN);
-}
-
-void Reset_Counter(void)
-{
-    counter = 0;
 }
 
 void My_WriteToLCD_Int(int value)
