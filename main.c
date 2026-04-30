@@ -22,6 +22,33 @@
 #define LED_CS_PIN  7
 #define LED_SEL_PIN 11
 
+/* ==================== Aufgabe 6: Frequenzmessung (TIM12 Input Capture) ==================== */
+/*
+ * PB14 = TIM12_CH1 (AF9, laut Datenblatt Tabelle 9)
+ * TIM12-Takt = 84 MHz / (83+1) = 1 MHz  →  1 Tick = 1 µs
+ * Frequenz (Hz) = 1.000.000 / Ticks_zwischen_zwei_Flanken
+ *
+ * TIM12 ist 16-bit; Überläufe werden gezählt und zu einem
+ * virtuellen 32-Bit-Zähler kombiniert → auch sehr niedrige
+ * Frequenzen (<15 Hz) sind messbar.
+ *
+ * Interrupt-Vektor: TIM8_BRK_TIM12_IRQn
+ *   (TIM12 teilt sich den Vektor mit TIM8_BRK auf STM32F407)
+ */
+#define TIM12_CLOCK_HZ  1000000UL   /* 1 MHz Zähltakt */
+#define CAP_TIMEOUT_MS  2000UL      /* Kein Signal → Anzeige "--" nach 2 s */
+
+/* Messdaten: in der ISR geschrieben, in der Hauptschleife gelesen */
+volatile uint32_t cap_ticks    = 0;   /* Ticks zwischen zwei steigenden Flanken */
+volatile uint32_t cap_freq_hz  = 0;   /* Berechnete Frequenz in Hz (ganzzahlig) */
+volatile uint32_t cap_last_ms  = 0;   /* ms_ticks-Zeitstempel der letzten Messung */
+volatile uint8_t  cap_valid    = 0;   /* 1 = mindestens eine gültige Messung vorhanden */
+
+/* ISR-interne Zustandsvariablen (nur in TIM8_BRK_TIM12_IRQHandler verwendet) */
+static volatile uint32_t tim12_overflow   = 0;  /* Anzahl der 16-Bit-Überläufe */
+static volatile uint32_t tim12_last_cap32 = 0;  /* Letzter 32-Bit-Capture-Wert */
+static volatile uint8_t  tim12_first      = 1;  /* Noch keine erste Flanke empfangen */
+
 /* ==================== PWM 亮度参数 ==================== */
 /* PWM分辨率：ARR=999，即CCR2范围 0~1000 */
 #define PWM_ARR        999
@@ -67,6 +94,7 @@ void LEDs_Write(uint16_t data);
 void Timer7_Init(void);
 void Timer4_PWM_Init(void);
 void Set_Backlight_Duty(uint16_t duty);
+void Timer12_Capture_Init(void);
 void LCD_UpdateDisplay(void);
 void u_delay(uint32_t usec);
 
@@ -281,6 +309,143 @@ void TIM7_IRQHandler(void)
     }
 }
 
+/* ==================== Aufgabe 6: TIM12 Input-Capture-Initialisierung ==================== */
+/*
+ * PB14 wird als TIM12_CH1 (AF9) konfiguriert.
+ *
+ * Zähltakt-Berechnung:
+ *   TIM12-Takt = APB1-Timertakt = 84 MHz
+ *   PSC = 83  →  Zähltakt = 84 MHz / (83+1) = 1 MHz  →  1 Tick = 1 µs
+ *   ARR = 0xFFFF (65535) → maximale Zählperiode ohne Prescaler-Anpassung
+ *
+ * Interrupts:
+ *   CC1IE  = Capture-Interrupt (steig. Flanke auf PB14)
+ *   UIE    = Update-Interrupt  (Überlauf des 16-Bit-Zählers)
+ *   Vektor = TIM8_BRK_TIM12_IRQn (geteilt auf STM32F407)
+ */
+void Timer12_Capture_Init(void)
+{
+    /* ---- GPIOB-Takt und TIM12-Takt aktivieren ---- */
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM12EN;
+
+    /* ---- PB14: Alternate-Function-Modus (MODER[29:28] = 10b) ---- */
+    GPIOB->MODER &= ~(3U << (2 * 14));
+    GPIOB->MODER |=  (2U << (2 * 14));
+
+    /* ---- AF9 (TIM12_CH1) für Pin 14 in AFRH (AFR[1])
+     *      Bits [27:24] = (14-8)*4 = 24 → auf 1001 (9) setzen ---- */
+    GPIOB->AFR[1] &= ~(0xFU << ((14 - 8) * 4));
+    GPIOB->AFR[1] |=  (9U   << ((14 - 8) * 4));
+
+    /* ---- TIM12-Grundkonfiguration ---- */
+    TIM12->CR1  = 0;
+    TIM12->PSC  = 83;       /* 84 MHz / 84 = 1 MHz → 1 Tick = 1 µs        */
+    TIM12->ARR  = 0xFFFF;   /* Maximaler 16-Bit-Zählerstand                */
+
+    /* ---- Kanal 1: Input Capture, ungefiltert, kein Prescaler
+     *      CC1S = 01b → TI1 (direkter Eingang)
+     *      IC1PSC = 00b → kein Prescaler (jede Flanke auslösen)
+     *      IC1F   = 0000b → kein digitaler Filter                 ---- */
+    TIM12->CCMR1 = (1U << TIM_CCMR1_CC1S_Pos);  /* CC1S = 01 */
+
+    /* ---- Steigende Flanke, Capture aktivieren (CCER: CC1P=0, CC1E=1) ---- */
+    TIM12->CCER  = TIM_CCER_CC1E;   /* CC1P=0 → steigende Flanke            */
+
+    /* ---- Interrupts: Capture (CC1IE) + Überlauf (UIE) aktivieren ---- */
+    TIM12->DIER  = TIM_DIER_CC1IE | TIM_DIER_UIE;
+
+    /* ---- NVIC: TIM12 teilt Vektor TIM8_BRK_TIM12_IRQn mit TIM8_BRK
+     *      Priorität höher als TIM7 (0 < 1), damit Captures exakt erfasst werden ---- */
+    NVIC_SetPriority(TIM8_BRK_TIM12_IRQn, 0);
+    NVIC_EnableIRQ(TIM8_BRK_TIM12_IRQn);
+
+    /* ---- Update-Event erzwingen, Flags löschen, Timer starten ---- */
+    TIM12->EGR |= TIM_EGR_UG;
+    TIM12->SR   = 0;
+    TIM12->CR1 |= TIM_CR1_CEN;
+}
+
+/* ==================== Aufgabe 6: TIM12 Interrupt-Serviceroutine ==================== */
+/*
+ * Dieser Handler wird für zwei Ereignisse aufgerufen:
+ *   1. UIF  (Update/Overflow): TIM12-Zähler hat 0xFFFF überschritten → Überlaufzähler ++
+ *   2. CC1IF (Capture):        Steigende Flanke auf PB14 → Zeitstempel auslesen
+ *
+ * Race-Condition-Behandlung (beide Flags gleichzeitig gesetzt):
+ *   Wenn CCR1 < 0x8000 → Flanke kam kurz NACH dem Überlauf
+ *     → aktueller overflow-Wert ist bereits korrekt hochgezählt (kein Abzug)
+ *   Wenn CCR1 >= 0x8000 → Flanke kam kurz VOR dem Überlauf
+ *     → overflow wurde fälschlich inkrementiert → overflow um 1 reduzieren
+ *
+ * Frequenzberechnung (ganzzahlig, kein Float):
+ *   cap_freq_hz = TIM12_CLOCK_HZ / cap_ticks
+ *               = 1.000.000 / delta_ticks
+ */
+void TIM8_BRK_TIM12_IRQHandler(void)
+{
+    uint32_t sr = TIM12->SR;
+
+    /* ------------------------------------------------------------------ */
+    /* 1. Überlauf-Interrupt (UIF): Überlaufzähler inkrementieren          */
+    /* ------------------------------------------------------------------ */
+    if (sr & TIM_SR_UIF)
+    {
+        TIM12->SR &= ~TIM_SR_UIF;   /* Flag löschen */
+        tim12_overflow++;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 2. Capture-Interrupt (CC1IF): Zeitstempel auswerten                 */
+    /* ------------------------------------------------------------------ */
+    if (sr & TIM_SR_CC1IF)
+    {
+        TIM12->SR &= ~TIM_SR_CC1IF;   /* Flag löschen */
+
+        /* CCR1 lesen (löscht CC1IF hardwareseitig ebenfalls) */
+        uint16_t raw16 = (uint16_t)TIM12->CCR1;
+
+        /* Überlaufkorrektur bei gleichzeitigem UIF + CC1IF:
+         * Wenn CCR1 groß (≥ 0x8000), kam die Flanke VOR dem Überlauf
+         * → der Überlaufzähler wurde bereits inkrementiert, muss korrigiert werden */
+        uint32_t ov = tim12_overflow;
+        if ((sr & TIM_SR_UIF) && (raw16 >= 0x8000U))
+            ov--;   /* Korrektur: Flanke war vor dem Überlauf */
+
+        /* 32-Bit-Capture-Wert zusammensetzen */
+        uint32_t cap32 = (ov << 16) | raw16;
+
+        if (tim12_first)
+        {
+            /* Erste Flanke: nur Referenz speichern, noch keine Messung */
+            tim12_last_cap32 = cap32;
+            tim12_first      = 0;
+        }
+        else
+        {
+            /* Differenz = Ticks zwischen zwei steigenden Flanken */
+            uint32_t delta = cap32 - tim12_last_cap32;
+            tim12_last_cap32 = cap32;
+
+            if (delta > 0)
+            {
+                cap_ticks   = delta;
+                cap_freq_hz = TIM12_CLOCK_HZ / delta;  /* Hz, ganzzahlig */
+                cap_last_ms = ms_ticks;
+                cap_valid   = 1;
+
+                /* LCD-Update maximal alle 200 ms anfordern */
+                static uint32_t last_lcd_req = 0;
+                if (ms_ticks - last_lcd_req >= 200)
+                {
+                    last_lcd_req      = ms_ticks;
+                    lcd_update_pending = 1;
+                }
+            }
+        }
+    }
+}
+
 /* ==================== 主函数 ==================== */
 int main(void)
 {
@@ -308,6 +473,9 @@ int main(void)
 
     /* ---- 启动 Timer7（1 ms 节拍） ---- */
     Timer7_Init();
+
+    /* ---- Aufgabe 6: TIM12 Input Capture für Frequenzmessung starten ---- */
+    Timer12_Capture_Init();
 
     /* ---- 上电后立即显示初始内容 ---- */
     LCD_UpdateDisplay();
@@ -415,15 +583,29 @@ void LEDs_Write(uint16_t data)
  * Hintergrundfarbe 0xFE00 entspricht LCD_ClearDisplay-Farbe,
  * damit alte Ziffern sauber überschrieben werden.
  */
+/*
+ * LCD_UpdateDisplay - Aktualisiert alle vier Anzeigezeilen.
+ *
+ * Zeile 1 (y=10): "Time Ticker: n"     – läuft immer
+ * Zeile 2 (y=30): "countdown: N s"     – nur während des 10-s-Countdowns
+ *                 (Zeile wird beim Ablauf des Countdowns gelöscht)
+ * Zeile 3 (y=55): "Ticks: xxxxxxx"     – Messwert in Mikrosekunden
+ *                 "--      " bei Timeout (kein Signal)
+ * Zeile 4 (y=75): "Freq:  xxxxx Hz"    – berechnete Frequenz in Hz
+ *                 "--      " bei Timeout (kein Signal)
+ *
+ * Hintergrundfarbe 0xFE00 entspricht LCD_ClearDisplay-Farbe,
+ * damit alte Ziffern sauber überschrieben werden.
+ */
 void LCD_UpdateDisplay(void)
 {
     char buf[32];
 
-    /* Zeile 1: immer sichtbar */
-    sprintf(buf, "Time Ticker: %-6d", counter);   /* %-6d überschreibt alte Ziffern */
+    /* ---- Zeile 1: Sekundenzähler (immer sichtbar) ---- */
+    sprintf(buf, "Time Ticker: %-6d", counter);
     LCD_WriteString(10, 10, WHITE, 0xFE00, buf);
 
-    /* Zeile 2: nur während aktivem Countdown */
+    /* ---- Zeile 2: Countdown (nur während aktivem Countdown) ---- */
     if (countdown_active)
     {
         uint32_t elapsed   = ms_ticks - release_time;
@@ -433,7 +615,25 @@ void LCD_UpdateDisplay(void)
     }
     else
     {
-        /* Zeile leeren (Hintergrundfarbe überschreibt alten Text) */
         LCD_WriteString(10, 30, 0xFE00, 0xFE00, "                  ");
+    }
+
+    /* ---- Zeilen 3+4: Frequenzmessung (Aufgabe 6) ---- */
+    /* Timeout-Prüfung: kein gültiges Signal seit CAP_TIMEOUT_MS → "--" anzeigen */
+    uint8_t timeout = (!cap_valid) ||
+                      ((ms_ticks - cap_last_ms) >= CAP_TIMEOUT_MS);
+
+    if (timeout)
+    {
+        LCD_WriteString(10, 55, WHITE, 0xFE00, "Ticks: --        ");
+        LCD_WriteString(10, 75, WHITE, 0xFE00, "Freq:  --        ");
+    }
+    else
+    {
+        sprintf(buf, "Ticks: %-9" PRIu32, cap_ticks);
+        LCD_WriteString(10, 55, WHITE, 0xFE00, buf);
+
+        sprintf(buf, "Freq:  %-7" PRIu32 " Hz", cap_freq_hz);
+        LCD_WriteString(10, 75, WHITE, 0xFE00, buf);
     }
 }
