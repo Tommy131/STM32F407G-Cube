@@ -130,9 +130,10 @@ void Timer12_Capture_Init(void)
      *    IC1F（Input Capture 1 digital Filter，输入捕获1数字滤波器）：
      *      默认 0000b → 无滤波，信号直接进入捕获单元（适合干净的方波）。
      * ──────────────────────────────────────────────────────────────────── */
-    TIM12->CCMR1 = (1U << TIM_CCMR1_CC1S_Pos);
+    TIM12->CCMR1 = (1U << TIM_CCMR1_CC1S_Pos)   /* CC1S=01：TI1 输入捕获 */
+                 | (3U << TIM_CCMR1_IC1PSC_Pos);/* IC1PSC=11：每 8 个上升沿捕获一次 */
     /*             ↑ CC1S=01：通道1 = 输入模式，连接 TI1（PB14）
-     *               IC1PSC=00（默认）：每个上升沿均捕获
+     *               IC1PSC=11：每 8 个上升沿捕获一次
      *               IC1F=0000（默认）：不启用数字滤波器                      */
 
     /* ────────────────────────────────────────────────────────────────────
@@ -173,10 +174,10 @@ void Timer12_Capture_Init(void)
      *    注意：STM32F407 上 TIM12 无独立向量，与 TIM8 刹车事件共用
      *          TIM8_BRK_TIM12_IRQn 向量。
      *
-     *    优先级设为 0（最高），高于 TIM7 的优先级 1，确保捕获时间戳精确，
-     *    不被 TIM7 中断打断（否则可能产生 ~1 µs 的时间戳误差）。
+     *    频率很高时 TIM12 中断会非常密集，若优先级过高会影响系统心跳和主循环。
+     *    这里将 TIM12 设为低于 TIM7（TIM7=1，TIM12=2），保障系统调度稳定。
      * ──────────────────────────────────────────────────────────────────── */
-    NVIC_SetPriority(TIM8_BRK_TIM12_IRQn, 0);  /* 优先级 0 = 最高 */
+    NVIC_SetPriority(TIM8_BRK_TIM12_IRQn, 2);
     NVIC_EnableIRQ(TIM8_BRK_TIM12_IRQn);       /* 在 NVIC 中使能该中断向量 */
 
     /* ────────────────────────────────────────────────────────────────────
@@ -213,7 +214,8 @@ void Timer12_Capture_Init(void)
  *   CCR1 < 0x8000：上升沿发生在溢出之后 → 溢出计数正确，无需修正
  *
  * 频率计算（纯整数，无浮点）：
- *   cap_freq_hz = TIM12_CLOCK_HZ / delta_ticks
+ *   IC1PSC=每8个上升沿捕获一次，因此
+ *   cap_freq_hz = (TIM12_CLOCK_HZ * CAP_EDGE_DIV) / delta_ticks
  */
 void TIM8_BRK_TIM12_IRQHandler(void)
 {
@@ -271,7 +273,7 @@ void TIM8_BRK_TIM12_IRQHandler(void)
             if (delta > 0)
             {
                 cap_ticks   = delta;
-                cap_freq_hz = TIM12_CLOCK_HZ / delta;  /* Hz = 84MHz / Ticks，纯整数 */
+                cap_freq_hz = (TIM12_CLOCK_HZ * CAP_EDGE_DIV) / delta;
                 cap_last_ms = ms_ticks;
                 cap_valid   = 1;
 

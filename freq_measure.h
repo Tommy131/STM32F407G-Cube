@@ -27,6 +27,9 @@
 /* ==================== 配置常量 ==================== */
 #define TIM12_CLOCK_HZ  84000000UL  /* TIM12 计数时钟（PSC=0，84 MHz） */
 #define CAP_TIMEOUT_MS  2000UL      /* 无信号超时时间：2 秒后显示 "--" */
+/* TIM12 输入捕获预分频：
+ * IC1PSC=11b 时每 8 个上升沿才产生一次捕获中断，显著降低高频时 ISR 压力。 */
+#define CAP_EDGE_DIV    8UL
 
 /* ==================== 测量结果（ISR 写入，主循环读取） ==================== */
 extern volatile uint32_t cap_ticks;    /* 两次上升沿之间的 Tick 数 */
