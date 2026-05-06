@@ -487,16 +487,17 @@ int main(void)
      */
     while (1)
     {
-        /* LCD 刷新在主循环中执行，避免阻塞中断（PD12 1Hz 精度依赖于此）*/
-        if (lcd_update_pending)
-        {
-            lcd_update_pending = 0;
-            LCD_UpdateDisplay();
-        }
-
-        /* 正向单灯跑马灯 */
+        /* 正向单灯跑马灯
+         * LCD-Update wird vor jedem Schritt geprüft (~alle 100 ms),
+         * damit lcd_update_pending nicht erst nach dem gesamten Zyklus
+         * (~3-4 s) abgearbeitet wird. */
         for (int i = 0; i < 16; i++)
         {
+            if (lcd_update_pending)
+            {
+                lcd_update_pending = 0;
+                LCD_UpdateDisplay();
+            }
             LEDs_Write(1 << i);
             u_delay(100000);
         }
@@ -504,6 +505,11 @@ int main(void)
         /* 全亮逐个熄灭 */
         for (int i = 0; i < 16; i++)
         {
+            if (lcd_update_pending)
+            {
+                lcd_update_pending = 0;
+                LCD_UpdateDisplay();
+            }
             LEDs_Write(~(uint16_t)(1 << i));
             u_delay(100000);
         }
