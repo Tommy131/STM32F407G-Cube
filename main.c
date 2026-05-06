@@ -24,25 +24,29 @@
 #include "pwm.h"
 #include "freq_measure.h"
 
+/* ==================== Aufgabe 3 测试开关 ==================== */
+/* 置 1 可启用组合测试：Basic -> 等待 USER 键 -> Efficiency */
+#define ENABLE_AUFGABE3_TEST 1
+
 /* ==================== 应用级全局状态变量 ==================== */
-volatile uint32_t ms_ticks        = 0;   /* TIM7 1ms 心跳计数 */
-volatile uint8_t  button_pressed  = 0;   /* 当前按键是否处于按下状态 */
-volatile uint8_t  key_last        = 0;   /* 上次采样的按键状态（边沿检测） */
+volatile uint32_t ms_ticks = 0;      /* TIM7 1ms 心跳计数 */
+volatile uint8_t button_pressed = 0; /* 当前按键是否处于按下状态 */
+volatile uint8_t key_last = 0;       /* 上次采样的按键状态（边沿检测） */
 
-volatile uint8_t  countdown_active = 0;  /* 10 秒倒计时进行中 */
-volatile uint32_t release_time     = 0;  /* 按键松开时刻（ms_ticks） */
+volatile uint8_t countdown_active = 0; /* 10 秒倒计时进行中 */
+volatile uint32_t release_time = 0;    /* 按键松开时刻（ms_ticks） */
 
-volatile int      counter          = 0;  /* LCD 秒计数器（每秒递增） */
+volatile int counter = 0; /* LCD 秒计数器（每秒递增） */
 
 /* LCD 刷新请求标志：ISR/其他模块置位，主循环执行实际刷新
  * （避免在中断上下文中执行耗时 GPIO 操作） */
-volatile uint8_t  lcd_update_pending = 0;
+volatile uint8_t lcd_update_pending = 0;
 
 /* PD12 LED 闪烁与按键采样节拍控制 */
 static volatile uint32_t led_toggle_last = 0;
-static volatile uint8_t  led_state       = 0;
-static volatile uint32_t key_check_last  = 0;
-static volatile uint32_t counter_last    = 0;
+static volatile uint8_t led_state = 0;
+static volatile uint32_t key_check_last = 0;
+static volatile uint32_t counter_last = 0;
 
 /* ==================== 函数声明 ==================== */
 void Timer7_Init(void);
@@ -61,19 +65,19 @@ void Timer7_Init(void)
 {
     RCC->APB1ENR |= RCC_APB1ENR_TIM7EN;
 
-    TIM7->CR1  = 0;
-    TIM7->PSC  = 8399;   /* 84 MHz / 8400 = 10 kHz */
-    TIM7->ARR  = 9;      /* 10 kHz / 10   = 1 kHz → 周期 1 ms */
+    TIM7->CR1 = 0;
+    TIM7->PSC = 8399; /* 84 MHz / 8400 = 10 kHz */
+    TIM7->ARR = 9;    /* 10 kHz / 10   = 1 kHz → 周期 1 ms */
 
-    TIM7->CR1  |= TIM_CR1_ARPE | TIM_CR1_URS;
-    TIM7->EGR  |= TIM_EGR_UG;
-    TIM7->SR    = 0;
+    TIM7->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
+    TIM7->EGR |= TIM_EGR_UG;
+    TIM7->SR = 0;
     TIM7->DIER |= TIM_DIER_UIE;
 
     NVIC_SetPriority(TIM7_IRQn, 1);
     NVIC_EnableIRQ(TIM7_IRQn);
 
-    TIM7->CR1  |= TIM_CR1_CEN;
+    TIM7->CR1 |= TIM_CR1_CEN;
 }
 
 /* ==================== TIM7 中断服务函数（1 ms 心跳） ==================== */
@@ -83,8 +87,9 @@ void Timer7_Init(void)
  */
 void TIM7_IRQHandler(void)
 {
-    if (!(TIM7->SR & TIM_SR_UIF)) return;
-    TIM7->SR &= ~TIM_SR_UIF;   /* 清除中断标志 */
+    if (!(TIM7->SR & TIM_SR_UIF))
+        return;
+    TIM7->SR &= ~TIM_SR_UIF; /* 清除中断标志 */
 
     ms_ticks++;
 }
@@ -104,9 +109,9 @@ void App_ProcessTickTasks(void)
         /* 上升沿：按键按下 → 立即全亮，取消倒计时和淡出 */
         if (key_now && !key_last)
         {
-            button_pressed   = 1;
+            button_pressed = 1;
             countdown_active = 0;
-            fade_active      = 0;    /* 取消正在进行的淡出 */
+            fade_active = 0; /* 取消正在进行的淡出 */
 
             /* 全亮度：CCR2 = 1000（100%） */
             Set_Backlight_Duty(BACKLIGHT_FULL);
@@ -115,8 +120,8 @@ void App_ProcessTickTasks(void)
         /* 下降沿：按键松开 → 启动 10 秒倒计时（亮度保持全亮）*/
         if (!key_now && key_last)
         {
-            button_pressed   = 0;
-            release_time     = ms_ticks;
+            button_pressed = 0;
+            release_time = ms_ticks;
             countdown_active = 1;
 
             /* PD12 松开后立即常亮 */
@@ -138,7 +143,7 @@ void App_ProcessTickTasks(void)
             led_state ^= 1;
 
             if (led_state)
-                GPIOD->ODR |=  (1 << 12);
+                GPIOD->ODR |= (1 << 12);
             else
                 GPIOD->ODR &= ~(1 << 12);
         }
@@ -151,7 +156,7 @@ void App_ProcessTickTasks(void)
     {
         counter_last = ms_ticks;
         counter++;
-        lcd_update_pending = 1;   /* 通知主循环刷新 LCD */
+        lcd_update_pending = 1; /* 通知主循环刷新 LCD */
     }
 
     /* ------------------------------------------------------------------ */
@@ -167,10 +172,10 @@ void App_ProcessTickTasks(void)
             countdown_active = 0;
 
             fade_active = 1;
-            fade_last   = ms_ticks;
+            fade_last = ms_ticks;
 
             LEDs_Write(0x0000);
-            lcd_update_pending = 1;   /* 通知主循环清除倒计时行 */
+            lcd_update_pending = 1; /* 通知主循环清除倒计时行 */
         }
     }
 
@@ -188,14 +193,14 @@ void App_ProcessTickTasks(void)
             {
                 /* 每步降低亮度 */
                 current_duty -= FADE_STEP;
-                TIM4->CCR2    = current_duty;
+                TIM4->CCR2 = current_duty;
             }
             else
             {
                 /* 达到目标亮度，淡出结束 */
                 current_duty = BACKLIGHT_DIM;
-                TIM4->CCR2   = BACKLIGHT_DIM;
-                fade_active  = 0;
+                TIM4->CCR2 = BACKLIGHT_DIM;
+                fade_active = 0;
             }
         }
     }
@@ -204,7 +209,7 @@ void App_ProcessTickTasks(void)
 /* 以小时间片执行阻塞延时，避免长延时导致时序任务“掉帧” */
 void App_DelayWithTasks(uint32_t total_us)
 {
-    const uint32_t slice_us = 1000;  /* 1 ms 时间片 */
+    const uint32_t slice_us = 1000; /* 1 ms 时间片 */
 
     while (total_us >= slice_us)
     {
@@ -226,10 +231,9 @@ int main(void)
     mcpr_SetSystemCoreClock();
 
     /* ---- 外设初始化 ---- */
-    LEDs_InitPorts();          /* 第1/2题：LED GPIO 初始化（同时使能 GPIOD） */
+    LEDs_InitPorts(); /* 第1/2题：LED GPIO 初始化（同时使能 GPIOD） */
 
-    LCD_Init();                /* 第3题：LCD 控制器初始化 */
-    LCD_ClearDisplay(0xFE00); /* 以背景色清屏 */
+    LCD_Init(); /* 第3题：LCD 控制器初始化 */
 
     /* ---- GPIO 时钟（GPIOA + GPIOD） ---- */
     RCC->AHB1ENR |= (1 << 0) | (1 << 3);
@@ -253,6 +257,12 @@ int main(void)
 
     /* ---- 上电后立即显示初始内容 ---- */
     LCD_UpdateDisplay();
+
+#if ENABLE_AUFGABE3_TEST
+    Aufgabe3_RunCombinedTest();
+#endif
+
+    LCD_ClearDisplay(0xFE00); /* 以背景色清屏 */
 
     /* ==================== 主循环：持续跑马灯 ==================== */
     /*
@@ -319,8 +329,8 @@ void LCD_UpdateDisplay(void)
     /* ---- 第2行：10秒倒计时（仅倒计时激活时显示） ---- */
     if (countdown_active)
     {
-        uint32_t elapsed   = ms_ticks - release_time;
-        uint8_t  remaining = (elapsed < 10000) ? (uint8_t)(10 - elapsed / 1000) : 0;
+        uint32_t elapsed = ms_ticks - release_time;
+        uint8_t remaining = (elapsed < 10000) ? (uint8_t)(10 - elapsed / 1000) : 0;
         sprintf(buf, "countdown: %-2d s  ", remaining);
         LCD_WriteString(10, 30, WHITE, 0xFE00, buf);
     }

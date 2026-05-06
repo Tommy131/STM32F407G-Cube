@@ -410,9 +410,9 @@
               <FilePath>.\freq_measure.c</FilePath>
             </File>
             <File>
-              <FileName>display.o</FileName>
-              <FileType>3</FileType>
-              <FilePath>.\display.o</FilePath>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\display.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -732,7 +732,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>1</Optim>
+            <Optim>4</Optim>
             <oTime>0</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -828,9 +828,9 @@
               <FilePath>.\freq_measure.c</FilePath>
             </File>
             <File>
-              <FileName>display.o</FileName>
-              <FileType>3</FileType>
-              <FilePath>.\display.o</FilePath>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\display.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1384,9 +1384,9 @@
               <FilePath>.\freq_measure.c</FilePath>
             </File>
             <File>
-              <FileName>display.o</FileName>
-              <FileType>3</FileType>
-              <FilePath>.\display.o</FilePath>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\display.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -53,6 +53,10 @@ void LCD_WriteString(uint16_t x, uint16_t y,
                      uint16_t colForeground, uint16_t colBackground,
                      char *text);
 
+/* Aufgabe 3 组合测试：
+ * Basic Test -> 提示并等待 USER 键 -> Efficiency Test（循环） */
+void Aufgabe3_RunCombinedTest(void);
+
 /* ------------------------------------------------------------------ */
 /* Hinweis: Diese Funktion muss in main.c bereitgestellt werden!       */
 /* Sie legt ein 16-Bit-Datenwort auf die (verteilten) GPIO-Pins.       */
