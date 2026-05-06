@@ -9,7 +9,7 @@
  *   freq_measure.c / .h    - 第6题：TIM12 输入捕获频率测量
  *
  * 本文件包含：
- *   - 第4题：按键检测、10秒倒计时、PD12 LED 闪烁（均在 TIM7 中断中处理）
+ *   - 第4题：按键检测、10秒倒计时、PD12 LED 闪烁（在主循环中处理）
  *   - TIM7 初始化（1 ms 节拍）
  *   - LCD 显示刷新（LCD_UpdateDisplay）
  *   - 主循环（跑马灯 + 定期 LCD 刷新）
@@ -38,13 +38,17 @@ volatile int      counter          = 0;  /* LCD 秒计数器（每秒递增） *
  * （避免在中断上下文中执行耗时 GPIO 操作） */
 volatile uint8_t  lcd_update_pending = 0;
 
-/* PD12 LED 闪烁控制（仅在 TIM7_IRQHandler 中使用） */
+/* PD12 LED 闪烁与按键采样节拍控制 */
 static volatile uint32_t led_toggle_last = 0;
 static volatile uint8_t  led_state       = 0;
+static volatile uint32_t key_check_last  = 0;
+static volatile uint32_t counter_last    = 0;
 
 /* ==================== 函数声明 ==================== */
 void Timer7_Init(void);
 void LCD_UpdateDisplay(void);
+void App_ProcessTickTasks(void);
+void App_DelayWithTasks(uint32_t total_us);
 
 /* ==================== Timer7 初始化（1 ms 中断） ==================== */
 /*
@@ -74,12 +78,8 @@ void Timer7_Init(void)
 
 /* ==================== TIM7 中断服务函数（1 ms 心跳） ==================== */
 /*
- * 每 1 ms 触发一次，集中处理所有时序逻辑：
- *   1. 按键边沿检测（每 50 ms 采样，消抖）
- *   2. PD12 精确 1 Hz 闪烁（按键按下期间）
- *   3. LCD 秒计数器递增与刷新请求
- *   4. 10 秒倒计时（按键松开后触发背光淡出）
- *   5. 背光亮度淡出（由 pwm.c 提供的状态变量驱动）
+ * 每 1 ms 触发一次，仅维护系统毫秒计数。
+ * 其他业务逻辑迁移至主循环中的 App_ProcessTickTasks。
  */
 void TIM7_IRQHandler(void)
 {
@@ -87,12 +87,14 @@ void TIM7_IRQHandler(void)
     TIM7->SR &= ~TIM_SR_UIF;   /* 清除中断标志 */
 
     ms_ticks++;
+}
 
+/* ==================== 基于 ms_ticks 的时序任务 ==================== */
+void App_ProcessTickTasks(void)
+{
     /* ------------------------------------------------------------------ */
     /* 1. 按键边沿检测（消抖：每 50 ms 采样一次）                           */
     /* ------------------------------------------------------------------ */
-    static uint32_t key_check_last = 0;
-
     if (ms_ticks - key_check_last >= 50)
     {
         key_check_last = ms_ticks;
@@ -145,13 +147,11 @@ void TIM7_IRQHandler(void)
     /* ------------------------------------------------------------------ */
     /* 3. 秒计数器递增与 LCD 刷新请求（始终运行，与按键状态无关）           */
     /* ------------------------------------------------------------------ */
-    static uint32_t counter_last = 0;
-
     if (ms_ticks - counter_last >= 1000)
     {
         counter_last = ms_ticks;
         counter++;
-        lcd_update_pending = 1;   /* 通知主循环刷新 LCD（不在中断中执行） */
+        lcd_update_pending = 1;   /* 通知主循环刷新 LCD */
     }
 
     /* ------------------------------------------------------------------ */
@@ -201,6 +201,25 @@ void TIM7_IRQHandler(void)
     }
 }
 
+/* 以小时间片执行阻塞延时，避免长延时导致时序任务“掉帧” */
+void App_DelayWithTasks(uint32_t total_us)
+{
+    const uint32_t slice_us = 1000;  /* 1 ms 时间片 */
+
+    while (total_us >= slice_us)
+    {
+        u_delay(slice_us);
+        App_ProcessTickTasks();
+        total_us -= slice_us;
+    }
+
+    if (total_us > 0)
+    {
+        u_delay(total_us);
+        App_ProcessTickTasks();
+    }
+}
+
 /* ==================== 主函数 ==================== */
 int main(void)
 {
@@ -238,35 +257,39 @@ int main(void)
     /* ==================== 主循环：持续跑马灯 ==================== */
     /*
      * 跑马灯完全在主循环中运行（正向单灯 + 全亮逐个熄灭）。
-     * PD12 闪烁、按键检测、倒计时、PWM 淡出均由 TIM7 中断处理。
+     * PD12 闪烁、按键检测、倒计时、PWM 淡出均由 App_ProcessTickTasks 处理。
      *
      * 每步循环前检查 lcd_update_pending，约每 100 ms 轮询一次，
      * 避免整轮跑马灯（约 3~4 秒）结束后才处理 LCD 刷新请求。
      */
     while (1)
     {
+        App_ProcessTickTasks();
+
         /* 正向单灯跑马灯（LED0 → LED15） */
         for (int i = 0; i < 16; i++)
         {
+            App_ProcessTickTasks();
             if (lcd_update_pending)
             {
                 lcd_update_pending = 0;
                 LCD_UpdateDisplay();
             }
             LEDs_Write(1 << i);
-            u_delay(100000);
+            App_DelayWithTasks(100000);
         }
 
         /* 全亮逐个熄灭（LED0 先灭 → LED15 最后灭） */
         for (int i = 0; i < 16; i++)
         {
+            App_ProcessTickTasks();
             if (lcd_update_pending)
             {
                 lcd_update_pending = 0;
                 LCD_UpdateDisplay();
             }
             LEDs_Write(~(uint16_t)(1 << i));
-            u_delay(100000);
+            App_DelayWithTasks(100000);
         }
     }
 }
