@@ -28,6 +28,7 @@
 #include "a2_1_3.h"
 #include "a2_1_5.h"
 #include "a2_2.h"
+#include "a2_3.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -132,6 +133,7 @@ int main(void)
 
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
+  A2_3_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
