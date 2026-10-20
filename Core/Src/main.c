@@ -23,7 +23,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <math.h>
+#include "a2_1_1.h"
+#include "a2_1_2.h"
+#include "a2_1_3.h"
+#include "a2_1_5.h"
+#include "a2_2.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +50,8 @@ I2C_HandleTypeDef hi2c1;
 
 I2S_HandleTypeDef hi2s3;
 
+RNG_HandleTypeDef hrng;
+
 SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim4;
@@ -59,13 +65,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-// Question A2.1.5
-osThreadId_t dimmTaskHandle;
-const osThreadAttr_t dimmTask_attributes = {
-  .name = "dimmTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
-};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,20 +76,16 @@ static void MX_I2S3_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_RNG_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-// Question A2.1.5
-void StartDimmTask(void *argument);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Question A2.1.2
-void orangeCallback(void *args);
-void orangeCallback(void *args) {
-	HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_14);
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -126,6 +122,7 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM7_Init();
   MX_TIM4_Init();
+  MX_RNG_Init();
   /* USER CODE BEGIN 2 */
   __HAL_RCC_GPIOD_CLK_ENABLE();
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -149,13 +146,7 @@ int main(void)
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  // Question A2.1.2
-  osTimerId_t orangeTimerHandle;
-  orangeTimerHandle = osTimerNew(orangeCallback, osTimerPeriodic, NULL, NULL);
-  if (orangeTimerHandle != NULL) {
-	  osTimerStart(orangeTimerHandle, 100);
-  }
+  A2_1_2_Start();
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -167,19 +158,12 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  // Question A2.1.5
-  dimmTaskHandle = osThreadNew(StartDimmTask, NULL, &dimmTask_attributes);
+  A2_1_5_Start();
+  A2_2_Init();
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  // Question A2.1.3
-  HAL_TIM_Base_Start_IT(&htim7);
-
-  // Question A2.1.5
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
-
-  // Initialize display
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, 32768);
+  A2_1_3_Start();
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -308,6 +292,32 @@ static void MX_I2S3_Init(void)
   /* USER CODE BEGIN I2S3_Init 2 */
 
   /* USER CODE END I2S3_Init 2 */
+
+}
+
+/**
+  * @brief RNG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RNG_Init(void)
+{
+
+  /* USER CODE BEGIN RNG_Init 0 */
+
+  /* USER CODE END RNG_Init 0 */
+
+  /* USER CODE BEGIN RNG_Init 1 */
+
+  /* USER CODE END RNG_Init 1 */
+  hrng.Instance = RNG;
+  if (HAL_RNG_Init(&hrng) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RNG_Init 2 */
+
+  /* USER CODE END RNG_Init 2 */
 
 }
 
@@ -542,30 +552,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-// Question A2.1.5
-void StartDimmTask(void *argument)
-{
-  const uint32_t periodMs = 2000;
-  const uint32_t stepMs = 20;
-  uint32_t timeMs = 0;
-  uint32_t maxCompare = htim4.Init.Period;
 
-  (void)argument;
-  for (;;)
-  {
-    /* 1 s rising, 1 s falling: duty = (1 - cos(2*pi*t/T)) / 2 */
-    float phase = 2.0f * 3.14159265f * (float)timeMs / (float)periodMs;
-    float duty = (1.0f - cosf(phase)) * 0.5f;
-    uint32_t compare = (uint32_t)(duty * (float)maxCompare + 0.5f);
-
-    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, compare);
-    osDelay(stepMs);
-    timeMs += stepMs;
-    if (timeMs >= periodMs) {
-      timeMs = 0;
-    }
-  }
-}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -580,19 +567,7 @@ void StartDefaultTask(void *argument)
   /* init code for USB_HOST */
   MX_USB_HOST_Init();
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-	  // Question A2.1.2
-	  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET) {
-		  osDelay(100);
-		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
-	  } else {
-		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
-	  }
-	  /* Block so the lower-priority timer service task can run. */
-	  osDelay(10);
-  }
+  A2_1_1_Task(argument);
   /* USER CODE END 5 */
 }
 
@@ -614,12 +589,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  // Question A2.1.3
-  if(htim->Instance == TIM7)
-  {
-	  // choose PD15, that no conflict with PD13 from software Timer
-	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
-  }
+  A2_1_3_OnPeriodElapsed(htim);
   /* USER CODE END Callback 1 */
 }
 

@@ -1,3 +1,8 @@
+"./Core/Src/a2_1_1.o"
+"./Core/Src/a2_1_2.o"
+"./Core/Src/a2_1_3.o"
+"./Core/Src/a2_1_5.o"
+"./Core/Src/a2_2.o"
 "./Core/Src/freertos.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
