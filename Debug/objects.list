@@ -4,6 +4,7 @@
 "./Core/Src/a2_1_5.o"
 "./Core/Src/a2_2.o"
 "./Core/Src/a2_3.o"
+"./Core/Src/a3.o"
 "./Core/Src/display.o"
 "./Core/Src/freertos.o"
 "./Core/Src/main.o"

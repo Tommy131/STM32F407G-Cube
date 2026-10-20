@@ -11,6 +11,7 @@ C_SRCS += \
 ../Core/Src/a2_1_5.c \
 ../Core/Src/a2_2.c \
 ../Core/Src/a2_3.c \
+../Core/Src/a3.c \
 ../Core/Src/display.c \
 ../Core/Src/freertos.c \
 ../Core/Src/main.c \
@@ -28,6 +29,7 @@ OBJS += \
 ./Core/Src/a2_1_5.o \
 ./Core/Src/a2_2.o \
 ./Core/Src/a2_3.o \
+./Core/Src/a3.o \
 ./Core/Src/display.o \
 ./Core/Src/freertos.o \
 ./Core/Src/main.o \
@@ -45,6 +47,7 @@ C_DEPS += \
 ./Core/Src/a2_1_5.d \
 ./Core/Src/a2_2.d \
 ./Core/Src/a2_3.d \
+./Core/Src/a3.d \
 ./Core/Src/display.d \
 ./Core/Src/freertos.d \
 ./Core/Src/main.d \

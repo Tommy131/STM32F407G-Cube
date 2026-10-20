@@ -29,6 +29,7 @@
 #include "a2_1_5.h"
 #include "a2_2.h"
 #include "a2_3.h"
+#include "a3.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -162,6 +163,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_THREADS */
   A2_1_5_Start();
   A2_2_Init();
+  A3_Init();
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
