@@ -75,11 +75,11 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-//void orangeCallback(void *args);
-//
-//void orangeCallback(void *args) {
-//	HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
-//}
+// Question A2.1.2
+void orangeCallback(void *args);
+void orangeCallback(void *args) {
+	HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
+}
 /* USER CODE END 0 */
 
 /**
@@ -138,11 +138,12 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
-//  /*osTimerId_t orangeTimerHandle;
-//  orangeTimerHandle = osTimerNew(orangeCallback, osTimerPeriodic, NULL, NULL);
-//  if (orangeTimerHandle != NULL) {
-//	  osTimerStart(orangeTimerHandle, 100);
-//  }*/
+  // Question A2.1.2
+  osTimerId_t orangeTimerHandle;
+  orangeTimerHandle = osTimerNew(orangeCallback, osTimerPeriodic, NULL, NULL);
+  if (orangeTimerHandle != NULL) {
+	  osTimerStart(orangeTimerHandle, 100);
+  }
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -158,6 +159,7 @@ int main(void)
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
+  // Question A2.1.3
   HAL_TIM_Base_Start_IT(&htim7);
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
@@ -484,6 +486,7 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
+	  // Question A2.1.2
 	  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET) {
 		  osDelay(100);
 		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
@@ -514,9 +517,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if( htim->Instance== TIM7)
-	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
-
+  // Question A2.1.3
+  if(htim->Instance == TIM7)
+  {
+	  // choose PD15, that no conflict with PD13 from software Timer
+	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
+  }
   /* USER CODE END Callback 1 */
 }
 
