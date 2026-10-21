@@ -24,9 +24,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "a2_1_1.h"
-#include "a2_1_2.h"
-#include "a2_1_3.h"
-#include "a2_1_5.h"
 #include "a2_2.h"
 #include "a2_3.h"
 #include "a3.h"
@@ -149,7 +146,7 @@ int main(void)
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  A2_1_2_Start();
+//  A2_1_2_Start();
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -161,13 +158,12 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  A2_1_5_Start();
   A2_2_Init();
   A3_Init();
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  A2_1_3_Start();
+//  A2_1_3_Start();
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -593,7 +589,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  A2_1_3_OnPeriodElapsed(htim);
+//  A2_1_3_OnPeriodElapsed(htim);
   /* USER CODE END Callback 1 */
 }
 

@@ -237,50 +237,6 @@ void LCD_WriteString(uint16_t x, uint16_t y,
     }
 }
 
-static void A3_WaitForUserKey(void)
-{
-    LCD_WriteString(10, 210, WHITE, BLACK, "Press USER key to continue");
-
-    /* 等待按键从松开到按下，再等待释放（简易消抖） */
-    while (GPIOA->IDR & 1U)
-    {
-    }
-    while (!(GPIOA->IDR & 1U))
-    {
-    }
-    lcd_delay(150000);
-    while (GPIOA->IDR & 1U)
-    {
-    }
-}
-
-static void A3_RunEfficiencyTest(void)
-{
-    uint16_t colorbg = 0xF800; /* 红色 */
-    uint16_t colorfg = 0x07E0; /* 绿色 */
-
-    while (1)
-    {
-        GPIOD->ODR ^= (1U << 12); /* 翻转引脚 PD12 */
-        LCD_ClearDisplay(colorbg);
-        LCD_WriteString(20, 220, colorfg, colorbg, "Hallo Welt!");
-        LCD_WriteString(20, 200, colorfg, colorbg, "Press USER to exit");
-
-        uint16_t tmp = colorfg;
-        colorfg = colorbg;
-        colorbg = (uint16_t)~tmp;
-
-        /* 按下 USER 键后退出效率测试，继续后续程序流程 */
-        if (GPIOA->IDR & 1U)
-        {
-            lcd_delay(150000);
-            while (GPIOA->IDR & 1U)
-            {
-            }
-            break;
-        }
-    }
-}
 
 /* ==================== LCD_Init ==================== */
 /*
