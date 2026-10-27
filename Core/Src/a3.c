@@ -10,7 +10,7 @@
  *   buttonTask  读 User 键，状态变化后发给 displayTask
  *   randomTask  每秒用片上随机数发生器产生一个数，发给 evalTask
  *   evalTask    每 5 个数算一次平均值，发给 displayTask
- *   potTask     读 PA1（ADC1 通道 1）上的电位器，发给 displayTask
+ *   potTask     读 CubeMX 配好的 PC1（ADC1 通道 11），发给 displayTask
  *   displayTask 把这三项画到液晶屏上
  *
  * 软件定时器在 a2_1_2.c，硬件定时器在 a2_1_3.c。
@@ -18,8 +18,10 @@
  *
  * 系统调用是 CMSIS-RTOS2，原型在 cmsis_os2.h。
  * 片上随机数文档：stm32f4xx_hal_rng.h，课件 UM1725 第 56.2.1 节。
- * 本工程没有带入 ADC 的 HAL 源文件，电位器直接读 ADC1 寄存器。
- * 电位器请接到 PA1。没有接线时，读数会漂在某个固定值附近。
+ * 电位器由 MX_ADC1_Init() 配置：PC1 = ADC1_IN11，采样 84 个周期。
+ * 实验板两个电位器固定接在 PC0 和 PC1。
+ * PC0 在 Discovery 上还连着 USB 电源开关，读数会停在 4095，所以用 PC1。
+ * 手写的寄存器初始化留在下面，用 #if 0 关掉。
  */
 
 #define A3_DISPLAY_QUEUE_DEPTH 8
@@ -39,6 +41,7 @@ typedef struct {
 } A3_Message;
 
 extern RNG_HandleTypeDef hrng;
+extern ADC_HandleTypeDef hadc1;
 
 static osMessageQueueId_t displayQueue;
 static osMessageQueueId_t randomQueue;
@@ -51,7 +54,6 @@ static void EvalTask(void *argument);
 static void PotTask(void *argument);
 static void DisplayTask(void *argument);
 static void SendDisplay(A3_MessageType type, uint32_t value);
-static void InitPotentiometer(void);
 static uint16_t ReadPotentiometer(void);
 
 static const osThreadAttr_t buttonTask_attributes = {
@@ -97,8 +99,6 @@ void A3_Init(void)
     Error_Handler();
   }
 
-  InitPotentiometer();
-
   osThreadNew(ButtonTask, NULL, &buttonTask_attributes);
   osThreadNew(RandomTask, NULL, &randomTask_attributes);
   osThreadNew(EvalTask, NULL, &evalTask_attributes);
@@ -122,14 +122,17 @@ static void SendDisplay(A3_MessageType type, uint32_t value)
   CheckStatus(osMessageQueuePut(displayQueue, &message, 0, osWaitForever));
 }
 
+#if 0
+/* 手写的 ADC 初始化。引脚、通道和时钟现在由 MX_ADC1_Init() 管理。 */
 static void InitPotentiometer(void)
 {
-  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
   RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
 
-  /* PA1 = ADC1 通道 1，模拟输入。 */
-  GPIOA->MODER |= (3U << (1U * 2U));
-  GPIOA->PUPDR &= ~(3U << (1U * 2U));
+  /* PC1 = ADC1 通道 11，模拟输入，无上下拉。 */
+  GPIOC->MODER &= ~(3U << (1U * 2U));
+  GPIOC->MODER |= (3U << (1U * 2U));
+  GPIOC->PUPDR &= ~(3U << (1U * 2U));
 
   /* APB2 是 84 MHz，四分频后 ADC 时钟是 21 MHz。 */
   ADC123_COMMON->CCR &= ~ADC_CCR_ADCPRE;
@@ -138,25 +141,24 @@ static void InitPotentiometer(void)
   ADC1->CR1 = 0;
   ADC1->CR2 = 0;
   ADC1->SQR1 = 0;
-  ADC1->SQR3 = 1;
-  ADC1->SMPR2 &= ~(7U << 3);
-  ADC1->SMPR2 |= (4U << 3);
+  ADC1->SQR3 = 11;
+  /* 通道 10–18 的采样时间在 SMPR1。通道 11 占用 bit 5:3，4 = 84 个周期。 */
+  ADC1->SMPR1 &= ~(7U << 3);
+  ADC1->SMPR1 |= (4U << 3);
   ADC1->CR2 |= ADC_CR2_ADON;
 }
+#endif
 
 static uint16_t ReadPotentiometer(void)
 {
-  uint32_t timeout = 100000U;
-
-  ADC1->SR &= ~ADC_SR_EOC;
-  ADC1->CR2 |= ADC_CR2_SWSTART;
-  while (((ADC1->SR & ADC_SR_EOC) == 0U) && (timeout > 0U)) {
-    timeout--;
-  }
-  if (timeout == 0U) {
+  /* 原型在 stm32f4xx_hal_adc.h。通道和引脚见 MX_ADC1_Init()。 */
+  if (HAL_ADC_Start(&hadc1) != HAL_OK) {
     return 0;
   }
-  return (uint16_t)ADC1->DR;
+  if (HAL_ADC_PollForConversion(&hadc1, 10) != HAL_OK) {
+    return 0;
+  }
+  return (uint16_t)HAL_ADC_GetValue(&hadc1);
 }
 
 static void ButtonTask(void *argument)
